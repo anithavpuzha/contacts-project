@@ -96,32 +96,38 @@ class ContactController extends Controller
             return back()->withErrors(['xml_file' => 'Invalid XML format.']);
         }
 
+        $existingPhones = Contact::pluck('phone')->flip()->toArray();
+
         $imported = 0;
         $skipped = 0;
         $skippedRows = [];
-
         $rowNumber = 1;
+
+        $newContacts = [];
+
         foreach ($xml->contact as $entry) {
             $name = trim((string) $entry->name);
             $phone = preg_replace('/\s+/', '', (string) $entry->phone);
 
-            if (Contact::where('phone', $phone)->exists()) {
+            if (isset($existingPhones[$phone])) {
                 $skipped++;
                 $skippedRows[] = "Row {$rowNumber}";
-                $rowNumber++;
-                continue;
+            } else {
+                $newContacts[] = [
+                    'name' => $name,
+                    'phone' => $phone,
+                ];
+                $existingPhones[$phone] = true;
             }
 
-            Contact::create([
-                'name' => $name,
-                'phone' => $phone,
-            ]);
-
-            $imported++;
             $rowNumber++;
         }
 
-        // Build skipped rows message
+        if (!empty($newContacts)) {
+            Contact::insert($newContacts);
+            $imported = count($newContacts);
+        }
+
         $skippedMessage = $skipped > 0
             ? ' Skipped: ' . implode(', ', $skippedRows)
             : '';
@@ -130,4 +136,5 @@ class ContactController extends Controller
             ->route('contacts.index')
             ->with('success', "Imported: {$imported}, Skipped: {$skipped}.{$skippedMessage}");
     }
+
 }
